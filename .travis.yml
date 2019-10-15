@@ -1,42 +1,35 @@
 sudo: required
 language: python
-python: 2.7
+python:
+- '2.7'
 services:
-  - docker
+- docker
 before_install:
-  - echo "ENV GIT_SHA ${TRAVIS_COMMIT}" >> Dockerfile
-  - export GIT_SHA=${TRAVIS_COMMIT}
-  - docker pull itsre/sumo-kitsune:full-latest
-install:
-  - pip install -U docker-compose
-  - cp .env-travis .env
-  - docker-compose up -d mariadb
-  - docker-compose up -d elasticsearch
-  - docker-compose up -d redis
-
-  # Docker always copies data as root. Chowning files to root before the build
-  # command will prevent docker cache invalidation due to different file
-  # metadata. Once Travis updates to the latest docker version we should
-  # probably use --chown flag for COPY. See https://github.com/moby/moby/pull/34263
-  - sudo chown -c 0:0 -R requirements package.json bower.json
-  - sudo chmod -c a+rw -R requirements package.json bower.json
-
-  # For some strange reason `docker-compose build` -even with the above chown
-  # trick- still invalidates the cache at the COPY command. Directly building
-  # with `docker build` works.
-  - docker build -t kitsune:latest --cache-from itsre/sumo-kitsune .
-
-  - docker-compose run --user root web ./manage.py nunjucks_precompile
-  - docker-compose run --user root web ./manage.py compilejsi18n
-  - docker-compose run --user root web ./manage.py collectstatic --noinput
+- openssl aes-256-cbc -K $encrypted_f6343abeba05_key -iv $encrypted_f6343abeba05_iv -in ci\/test-l10nfork-key.enc -out ci\/test-l10nfork-key -d
+- chmod 600 ci\/test-l10nfork-key
+- export GIT_SHA=${TRAVIS_COMMIT}
+- make pull
 script:
-  - docker-compose run --user root web flake8 kitsune
-  - docker-compose run --user root web ./node_modules/.bin/mocha --compilers js:babel/register --recursive kitsune/*/static/*/js/tests/* $@
-  - docker-compose run --user root -e REUSE_STATIC=1 web ./manage.py test --noinput --nologcapture -a '!search_tests' --with-nicedots
+- ./scripts/lint-l10n-repo.sh --push; # For testing on travis branchonly
+- if [[ "$TRAVIS_BRANCH" == "master" ]]; then 
+    ./scripts/lint-l10n-repo.sh --push;
+  fi
+- make build-ci
+- make lint-ci
+- make test-js-ci
+- make test-ci
+after_success:
+- if [[ "$TRAVIS_BRANCH" == "master" ]]; then 
+    ./docker/bin/push-docker-images.sh;
+  fi
+- if [[ "$TRAVIS_BRANCH" == "travis" ]]; then 
+    ./docker/bin/push-docker-images.sh;
+  fi
+env:
+  global:
+  - secure: j3j4ARHbQwvNMx2W/JHGkLHMyDMnaLT8D8E9brSu2k1+0BZiEfZU1wmPhmPZ/GuorjZJvwB7K7n29wi89rR+VQmZlro/Eq+Cyi/2k6kVItsSFiDiMad0CxwD9nkrYMQcKwA1FzinlizoJkmAsz27Y7AkPFLyR+VofFEkJ/hWKhg=
+  - secure: Pc3xhQvrSG0XeBxZm4U3EChlHlhwPoMKQMlAuJuhjNV3EFtbhFqbp7K0m4zXmauX4qe4pWUGiC2Y5zg2NgemXkIaxQqrs7uPDYZF1FHq2bshN4//fBgLZ72nh9zpb0fdCR5Ij1EOTtTOt2iEFYPFeCxoV/NBlHEvv0Rg3BioIbA=
+  - DOCKER_REPO=itsre/sumo-kitsune-travis
 notifications:
-  email: false
-  irc:
-    channels:
-    - irc.mozilla.org#sumodev
-    on_success: always
-    on_failure: always
+  slack:
+    secure: Mq/2mpiKRd5ap2Re7PyGM4K7vWvN2bo1kSHd9XyeZ+LiLrLkm14QUYAbUe3WcQUDUeRtSR8zVHKRGxmBXc+TNB/Q/MCm3vgxspdqO6ScLqX3FAqwc6MVq494gn22o7fp5z/EwzdsWUlTOFUENpRzQmsF0sf3LAuijsLWvPxk4pM=

@@ -22,7 +22,7 @@ after_success:
 - if [[ "$TRAVIS_BRANCH" == "master" ]]; then 
     ./docker/bin/push-docker-images.sh;
   fi
-- if [[ "$TRAVIS_BRANCH" == "travis" ]]; then 
+- if [[ "$TRAVIS_BRANCH" == "travis-rebased" ]]; then 
     ./docker/bin/push-docker-images.sh;
   fi
 env:
